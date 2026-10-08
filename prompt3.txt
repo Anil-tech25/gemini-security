@@ -1,1 +1,0 @@
-What is CVE-2021-44228, which software does it affect, and how serious is it?
