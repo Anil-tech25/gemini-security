@@ -34,6 +34,12 @@ python main.py prompt1.txt
 
 The script reads the prompt from the file, sends it to Gemini, prints the response, and appends the model, prompt and response to `results.md`. Each run makes one API call, so run each prompt only once to save free-tier quota.
 
+To use the web interface instead:
+
+```
+streamlit run app.py
+```
+
 ## Experiments
 
 | # | Prompt file | Topic |
