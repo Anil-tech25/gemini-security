@@ -53,7 +53,3 @@ Full prompts, responses, expectations and assessments are in [results.md](result
 ## Reflection
 
 Gemini was mostly correct on the main security issues, but it sometimes sounded confident about details that were wrong, like saying `with sqlite3.connect()` closes the connection. I learned that I should always check its claims against official documentation before trusting them. I also ran into real problems, such as 503 "high demand" errors and forgetting to pass a prompt file, which showed me that working with an LLM API needs error handling.
-
-## AI assistance
-
-I used Claude (an AI assistant) to help troubleshoot Git and command-line errors, and to help draft and fact-check the assessments in `results.md` and parts of this README. My professor approved using Claude for this assignment. I reviewed and checked everything before submitting.
