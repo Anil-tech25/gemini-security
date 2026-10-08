@@ -4,23 +4,18 @@
 
 **Model:** gemini-3.8-flash
 
-**Prompt:**
+**Prompt (contents of `prompt1.txt`):**
 
-```
-
-Review this Python code for security problems and suggest a fix:
-
+```python
 import sqlite3
 
 def get_user(username):
-
     conn = sqlite3.connect("users.db")
-
     query = "SELECT * FROM users WHERE name = '" + username + "'"
-
     return conn.execute(query).fetchall()
-
 ```
+
+**Note:** `prompt1.txt` contains only the code, with no instruction such as "Review this code for security problems." Gemini still treated it as a security review on its own, which is interesting in itself.
 
 **My expectation (before running):** Gemini will find SQL injection and suggest parameterized queries.
 
@@ -146,11 +141,25 @@ Before escalating, rule out these common benign causes:
 2. **Check the failure reason:** Wrong password (`6A`) vs. non-existent user (`64`)?
 3. **Check the source:** Internal host, domain controller, or external IP?
 4. **Correlate with Success:** Did the failed logon sequence end with an **Event ID 4624 (Logon Type 2, 3, or 10)** from the same source? If yes, treat this as a **high-priority compromise**.
+
+**My expectation (before running):** TODO: write in your own words what you expected Gemini to say before you ran it.
+
+**My assessment:**
+
+- **Right:** Logon types 2, 3, 4, 5 and 10 and the sub status codes `0xC000006A`, `0xC0000064`, `0xC0000234`, `0xC0000072` and `0xC0000193` are correct. The spraying vs. brute-force patterns, "4625 followed by 4624 = possible compromise", and the false positives (stale service account passwords, cached credentials, typos) match standard SOC practice.
+- **Wrong / misleading:** Point 5 says external RDP attacks show up as **Logon Type 10**. With Network Level Authentication (NLA), which is on by default in modern Windows, a failed RDP logon is rejected during network authentication and is usually logged as **Logon Type 3**. A detection rule that only looks for Type 10 would miss most RDP brute force.
+- **Missed:**
+  - Account lockout has its own event, **4740**. Gemini only mentions the `0xC0000234` status code.
+  - On domain controllers, failed Kerberos pre-authentication is logged as **4771** and NTLM credential validation as **4776**. Password spraying against Active Directory often shows up there, not in 4625.
+  - Logon types 7, 8, 9 and 11 are not mentioned.
+  - The `IpAddress` field is often `-` for local logons, and the NTLM workstation name can be set by the client, so the source can't always be trusted.
+- **Claimed without evidence:** "Endpoints rarely connect to other endpoints" is a reasonable rule of thumb, but no source is given and it depends on the environment. Listing `krbtgt` as a typical target is odd, since that account is disabled by design.
+- **How I checked:** Microsoft's documentation for event 4625 (logon types and status codes) and how RDP with NLA authenticates.
+
 ## Experiment 3: Log4Shell (CVE-2021-44228)
 
-**My expectation (before running):** ...
+**My expectation (before running):** TODO: write in your own words what you expected before reading the answer.
 
-## prompt3.txt (2026-10-08 11:44)
 **Model:** gemini-3.8-flash
 
 **Prompt:** What is CVE-2021-44228, which software does it affect, and how serious is it?
@@ -210,3 +219,12 @@ It is rated as **Maximum Severity**.
 
 ### How it was resolved:
 Apache released multiple patches to fix the issue and subsequent bypasses discovered shortly after. The vulnerability was permanently mitigated by completely disabling JNDI lookups by default, starting in **Log4j version 2.16.0** (with version **2.17.1+** recommended for complete stability and security).
+
+**My assessment:**
+
+- **Right:** It is an unauthenticated remote code execution bug in Apache Log4j 2 caused by JNDI lookups in logged strings (`${jndi:ldap://...}`). The CVSS score is 10.0. Log4j 1.x is not affected by this CVE. It was hard to find because Log4j is often buried in other dependencies. All of these match NVD and the Apache Log4j security page.
+- **Partly wrong / incomplete:**
+  - Fixed versions: the first fix was **2.15.0**, but it was incomplete (CVE-2021-45046). 2.16.0 disabled JNDI by default and removed message lookups. 2.17.0 fixed a denial-of-service bug (CVE-2021-45105), and 2.17.1 fixed CVE-2021-44832. Gemini recommends 2.17.1+ but doesn't explain that these were separate vulnerabilities. NVD now lists the affected range as up to 2.15.0 (except some backport releases), not 2.14.1.
+  - "Downloads malicious Java code and executes it": newer Java versions block loading remote classes over JNDI by default (`trustURLCodebase=false`). Attackers worked around that with other techniques, and could still leak secrets with lookups like `${env:...}`, but the simple "download and run" path isn't the default anymore. Gemini doesn't mention this.
+- **Claimed without evidence:** "First observed in Minecraft." The bug was reported to Apache by Alibaba Cloud's security team. Minecraft was where public exploitation became widely known. The list of affected cloud providers and "Java runs on billions of devices" come with no sources.
+- **How I checked:** NVD entry for CVE-2021-44228, the Apache Log4j security page, and CISA's Log4j guidance.
