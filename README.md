@@ -52,11 +52,7 @@ Full prompts, responses, expectations and assessments are in [results.md](result
 
 ## Reflection
 
-TODO: write a few sentences in your own words. For example:
-- Did Gemini's answers match what you expected?
-- What surprised you most, such as the confident but wrong sqlite3 claim?
-- When would you trust an LLM for security work, and when would you double-check it?
-- What problems did you run into, such as the 503 "high demand" error, the missing prompt-file argument, or keeping the API key out of Git?
+Gemini was mostly correct on the main security issues, but it sometimes sounded confident about details that were wrong, like saying `with sqlite3.connect()` closes the connection. I learned that I should always check its claims against official documentation before trusting them. I also ran into real problems, such as 503 "high demand" errors and forgetting to pass a prompt file, which showed me that working with an LLM API needs error handling.
 
 ## AI assistance
 
