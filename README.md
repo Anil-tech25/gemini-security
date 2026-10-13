@@ -6,6 +6,11 @@ First Gemini API experiment: testing how well an LLM reviews cybersecurity examp
 
 `gemini-3.8-flash` (free tier), called with the `google-genai` Python SDK.
 
+## Requirements
+
+- **Python 3.12 or newer** (the pinned `numpy` version in `requirements.txt` needs it). Check with `python --version` (Windows) or `python3 --version` (Linux/macOS).
+- A free Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey).
+
 ## Setup (Windows)
 
 ```
@@ -22,11 +27,29 @@ Create a file named `.env` in the project folder containing your key:
 GEMINI_API_KEY=your_key_here
 ```
 
-Get a key from [Google AI Studio](https://aistudio.google.com/apikey). `.env` is listed in `.gitignore`, so the key is never committed.
+## Setup (Linux / macOS)
+
+```bash
+git clone https://github.com/Anil-tech25/gemini-security.git
+cd gemini-security
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+On Ubuntu/Debian, if `venv` is missing, install it first with `sudo apt install python3-venv`.
+
+Create the `.env` file with your key:
+
+```bash
+echo "GEMINI_API_KEY=your_key_here" > .env
+```
+
+On every system, `.env` is listed in `.gitignore`, so the key is never committed. Activate the virtual environment again (`venv\Scripts\activate` on Windows, `source venv/bin/activate` on Linux/macOS) each time you open a new terminal.
 
 ## How to run
 
-Pass a prompt file to the script:
+Pass a prompt file to the script (use `python3` instead of `python` on Linux/macOS if needed):
 
 ```
 python main.py prompt1.txt
@@ -39,6 +62,8 @@ To use the web interface instead:
 ```
 streamlit run app.py
 ```
+
+The app opens at http://localhost:8501. Stop it with `Ctrl+C`.
 
 ## Experiments
 
