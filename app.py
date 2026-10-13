@@ -12,7 +12,7 @@ from google import genai
 
 load_dotenv()  # reads GEMINI_API_KEY from .env
 
-MODEL = "gemini-3.8-flash"  # free-tier model
+MODEL = "gemini-3.6-flash"  # free-tier model
 SAVED_FILE = Path("saved_reviews.json")
 
 # Synthetic example code. It is only sent to Gemini as text, never executed.
@@ -102,6 +102,9 @@ context = st.text_area(
 question = st.text_input("Review question", value=DEFAULT_QUESTION, key=f"question_{sample}")
 st.caption("Try a different question or context, then compare the answers.")
 
+# The prompt for what is on screen right now. A review is only current if it was made for this exact prompt.
+current_prompt = build_prompt(code, context, question)
+
 st.warning("A live review sends these fields to Google. Use synthetic, non-sensitive code.")
 
 col1, col2 = st.columns(2)
@@ -109,7 +112,7 @@ run_review = col1.button("Review with Gemini", type="primary", use_container_wid
 load_demo = col2.button("Load saved demo", use_container_width=True)
 
 if run_review:
-    prompt = build_prompt(code, context, question)
+    prompt = current_prompt
     try:
         with st.spinner("Asking Gemini..."):
             client = genai.Client()
@@ -124,7 +127,7 @@ if run_review:
             "answer": answer,
         }
         save_review(sample, review)
-        st.session_state.result = {**review, "source": "live"}
+        st.session_state.result = {**review, "source": "live", "sample": sample}
     except Exception as e:  # e.g. 503 high demand, 429 quota, bad key
         st.error(
             f"The Gemini call failed: {e}\n\n"
@@ -135,7 +138,7 @@ if run_review:
 if load_demo:
     saved = load_saved().get(sample)
     if saved:
-        st.session_state.result = {**saved, "source": "saved"}
+        st.session_state.result = {**saved, "source": "saved", "sample": sample}
     else:
         st.info("No saved review for this example yet. Run a live review once and it will be saved.")
 
@@ -144,6 +147,16 @@ st.header("02 / Evidence")
 result = st.session_state.get("result")
 if result:
     label = "Live review" if result["source"] == "live" else f"Saved review from {result['time']}"
+
+    # Stale-result check: was this review made for the example and inputs shown above?
+    outdated = result.get("sample") != sample or result.get("prompt") != current_prompt
+    if outdated:
+        st.warning(
+            "⚠️ Outdated: this review was made for a different example, code, context or question. "
+            "Click 'Review with Gemini' to review what is on screen now."
+        )
+        label += ", OUTDATED"
+
     st.subheader(f"The model's review ({label})")
     st.caption(f"Model: {result['model']}  |  Question: {result['question']}")
     if result.get("context"):
