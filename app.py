@@ -12,7 +12,7 @@ from google import genai
 
 load_dotenv()  # reads GEMINI_API_KEY from .env
 
-MODEL = "gemini-3.6-flash"  # free-tier model
+MODEL = "gemini-3.8-flash"  # free-tier model
 SAVED_FILE = Path("saved_reviews.json")
 
 # Synthetic example code. It is only sent to Gemini as text, never executed.
