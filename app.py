@@ -6,13 +6,16 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 import streamlit as st
 from dotenv import load_dotenv
 from google import genai
+from google.genai import types
 
 load_dotenv()  # reads GEMINI_API_KEY from .env
 
 MODEL = "gemini-3.8-flash"  # free-tier model
+TIMEOUT_SECONDS = 120  # stop waiting for Gemini after this long
 SAVED_FILE = Path("saved_reviews.json")
 
 # Synthetic example code. It is only sent to Gemini as text, never executed.
@@ -67,6 +70,15 @@ def build_prompt(code, context, question):
     return "\n\n".join(parts)
 
 
+def is_timeout(error):
+    """True if this error, or an error that caused it, was a timeout."""
+    while error is not None:
+        if isinstance(error, httpx.TimeoutException) or "Timeout" in type(error).__name__:
+            return True
+        error = error.__cause__ or error.__context__
+    return False
+
+
 def load_saved():
     try:
         return json.loads(SAVED_FILE.read_text(encoding="utf-8"))
@@ -115,7 +127,9 @@ if run_review:
     prompt = current_prompt
     try:
         with st.spinner("Asking Gemini..."):
-            client = genai.Client()
+            client = genai.Client(
+                http_options=types.HttpOptions(timeout=int(TIMEOUT_SECONDS * 1000))  # in milliseconds
+            )
             response = client.interactions.create(model=MODEL, input=prompt)
             answer = response.output_text
         review = {
@@ -128,12 +142,18 @@ if run_review:
         }
         save_review(sample, review)
         st.session_state.result = {**review, "source": "live", "sample": sample}
-    except Exception as e:  # e.g. 503 high demand, 429 quota, bad key
-        st.error(
-            f"The Gemini call failed: {e}\n\n"
-            "If it says high demand (503) or quota (429), wait a bit and try again, "
-            "or click 'Load saved demo'."
-        )
+    except Exception as e:  # e.g. timeout, 503 high demand, 429 quota, bad key
+        if is_timeout(e):
+            st.error(
+                f"Gemini didn't answer within {TIMEOUT_SECONDS} seconds. "
+                "Try again in a moment, or click 'Load saved demo'."
+            )
+        else:
+            st.error(
+                f"The Gemini call failed: {e}\n\n"
+                "If it says high demand (503) or quota (429), wait a bit and try again, "
+                "or click 'Load saved demo'."
+            )
 
 if load_demo:
     saved = load_saved().get(sample)
