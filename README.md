@@ -4,7 +4,13 @@ First Gemini API experiment: testing how well an LLM reviews cybersecurity examp
 
 ## Model
 
-`gemini-3.8-flash` (free tier), called with the `google-genai` Python SDK.
+`gemini-3.5-flash-lite` (free tier), called with the `google-genai` Python SDK.
+
+I switched from `gemini-3.8-flash` because it (and `gemini-3.7-flash`) kept returning 503 "high demand" errors. Experiments 1–3 in `results.md` were run with `gemini-3.8-flash`.
+
+## Time limit
+
+`gemini_client.py` limits the total wait for Gemini to 120 seconds, retries included. It turns off the SDK's automatic retries and retries 429/5xx errors itself, giving each attempt only the time that is left. `python test_timeout.py` checks this with a fake Gemini (a 503, then a timeout), so it needs no internet or API key.
 
 ## Requirements
 
