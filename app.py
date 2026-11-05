@@ -25,33 +25,6 @@ def get_user(username):
     query = "SELECT * FROM users WHERE name = '" + username + "'"
     return conn.execute(query).fetchall()
 ''',
-    "02 · The same lookup, fixed": '''import sqlite3
-from contextlib import closing
- 
-def get_user(username):
-    with closing(sqlite3.connect("users.db")) as conn:
-        query = "SELECT * FROM users WHERE name = ?"
-        return conn.execute(query, (username,)).fetchall()
-''',
-    "03 · A ping helper": '''import subprocess
- 
-def ping(host):
-    # host comes from a web form
-    result = subprocess.run("ping -c 1 " + host, shell=True,
-                            capture_output=True, text=True)
-    return result.stdout
-''',
-    "04 · A file download": '''import os
-from flask import Flask, request, send_file
- 
-app = Flask(__name__)
-BASE_DIR = "/srv/files"
- 
-@app.route("/download")
-def download():
-    name = request.args.get("file")
-    return send_file(os.path.join(BASE_DIR, name))
-''',
 }
  
 DEFAULT_QUESTION = "What security problems does this code have, and how should they be fixed?"
@@ -83,11 +56,11 @@ def save_review(sample, review):
  
 st.set_page_config(page_title="Gemini Code Review Lab", layout="wide")
 st.title("Gemini Code Review Lab")
-st.caption(f"Model: {MODEL}. Pick some code, give the reviewer context, ask a question, and check the answer.")
+st.caption(f"Model: {MODEL}. Edit the code, give the reviewer context, ask a question, and check the answer.")
  
 # ---------- 01 / Experiment ----------
 st.header("01 / Experiment")
-sample = st.radio("Choose a starting point", list(SAMPLES), horizontal=True)
+sample = "01 · A user lookup"  # the only example
  
 code = st.text_area(
     "Source code (editable, never executed)",
