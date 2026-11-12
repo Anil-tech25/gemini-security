@@ -1,61 +1,35 @@
 """Gemini Code Review Lab - a small web interface for the Gemini experiments.
-
+ 
 Run with:  streamlit run app.py
 """
 import json
 from datetime import datetime
 from pathlib import Path
-
+ 
 import streamlit as st
 from dotenv import load_dotenv
-from google import genai
-
+ 
+from gemini_client import TIME_LIMIT_SECONDS, GeminiTimeLimitError, ask_gemini, make_client
+ 
 load_dotenv()  # reads GEMINI_API_KEY from .env
-
-MODEL = "gemini-3.8-flash"  # free-tier model
+ 
+MODEL = "gemini-3.5-flash-lite"  # free-tier model
 SAVED_FILE = Path("saved_reviews.json")
-
+ 
 # Synthetic example code. It is only sent to Gemini as text, never executed.
 SAMPLES = {
     "01 · A user lookup": '''import sqlite3
-
+ 
 def get_user(username):
     conn = sqlite3.connect("users.db")
     query = "SELECT * FROM users WHERE name = '" + username + "'"
     return conn.execute(query).fetchall()
 ''',
-    "02 · The same lookup, fixed": '''import sqlite3
-from contextlib import closing
-
-def get_user(username):
-    with closing(sqlite3.connect("users.db")) as conn:
-        query = "SELECT * FROM users WHERE name = ?"
-        return conn.execute(query, (username,)).fetchall()
-''',
-    "03 · A ping helper": '''import subprocess
-
-def ping(host):
-    # host comes from a web form
-    result = subprocess.run("ping -c 1 " + host, shell=True,
-                            capture_output=True, text=True)
-    return result.stdout
-''',
-    "04 · A file download": '''import os
-from flask import Flask, request, send_file
-
-app = Flask(__name__)
-BASE_DIR = "/srv/files"
-
-@app.route("/download")
-def download():
-    name = request.args.get("file")
-    return send_file(os.path.join(BASE_DIR, name))
-''',
 }
-
+ 
 DEFAULT_QUESTION = "What security problems does this code have, and how should they be fixed?"
-
-
+ 
+ 
 def build_prompt(code, context, question):
     parts = [
         "You are reviewing code for security problems. The code is text only; do not assume it has been run.",
@@ -65,29 +39,29 @@ def build_prompt(code, context, question):
     parts.append(f"Code:\n```\n{code}\n```")
     parts.append(f"Question: {question.strip() or DEFAULT_QUESTION}")
     return "\n\n".join(parts)
-
-
+ 
+ 
 def load_saved():
     try:
         return json.loads(SAVED_FILE.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
-
-
+ 
+ 
 def save_review(sample, review):
     saved = load_saved()
     saved[sample] = review
     SAVED_FILE.write_text(json.dumps(saved, indent=2, ensure_ascii=False), encoding="utf-8")
-
-
+ 
+ 
 st.set_page_config(page_title="Gemini Code Review Lab", layout="wide")
 st.title("Gemini Code Review Lab")
-st.caption(f"Model: {MODEL}. Pick some code, give the reviewer context, ask a question, and check the answer.")
-
+st.caption(f"Model: {MODEL}. Edit the code, give the reviewer context, ask a question, and check the answer.")
+ 
 # ---------- 01 / Experiment ----------
 st.header("01 / Experiment")
-sample = st.radio("Choose a starting point", list(SAMPLES), horizontal=True)
-
+sample = "01 · A user lookup"  # the only example
+ 
 code = st.text_area(
     "Source code (editable, never executed)",
     value=SAMPLES[sample],
@@ -101,22 +75,22 @@ context = st.text_area(
 )
 question = st.text_input("Review question", value=DEFAULT_QUESTION, key=f"question_{sample}")
 st.caption("Try a different question or context, then compare the answers.")
-
+ 
 # The prompt for what is on screen right now. A review is only current if it was made for this exact prompt.
 current_prompt = build_prompt(code, context, question)
-
+ 
 st.warning("A live review sends these fields to Google. Use synthetic, non-sensitive code.")
-
+ 
 col1, col2 = st.columns(2)
 run_review = col1.button("Review with Gemini", type="primary", use_container_width=True)
 load_demo = col2.button("Load saved demo", use_container_width=True)
-
+ 
 if run_review:
     prompt = current_prompt
     try:
         with st.spinner("Asking Gemini..."):
-            client = genai.Client()
-            response = client.interactions.create(model=MODEL, input=prompt)
+            client = make_client()
+            response = ask_gemini(client, MODEL, prompt)
             answer = response.output_text
         review = {
             "time": f"{datetime.now():%Y-%m-%d %H:%M}",
@@ -126,28 +100,35 @@ if run_review:
             "prompt": prompt,
             "answer": answer,
         }
-        save_review(sample, review)
+        # Save it only if this example has no saved review yet, so a good demo is never replaced
+        if sample not in load_saved():
+            save_review(sample, review)
         st.session_state.result = {**review, "source": "live", "sample": sample}
-    except Exception as e:  # e.g. 503 high demand, 429 quota, bad key
+    except GeminiTimeLimitError:
+        st.error(
+            f"Gemini didn't answer within {TIME_LIMIT_SECONDS} seconds (retries included). "
+            "Try again in a moment, or click 'Load saved demo'."
+        )
+    except Exception as e:  # e.g. 503 high demand or 429 quota with no time left to retry, bad key
         st.error(
             f"The Gemini call failed: {e}\n\n"
-            "If it says high demand (503) or quota (429), wait a bit and try again, "
-            "or click 'Load saved demo'."
+            f"If it says high demand (503) or quota (429), it already kept retrying for up to {TIME_LIMIT_SECONDS} seconds. "
+            "Wait a bit and try again, or click 'Load saved demo'."
         )
-
+ 
 if load_demo:
     saved = load_saved().get(sample)
     if saved:
         st.session_state.result = {**saved, "source": "saved", "sample": sample}
     else:
         st.info("No saved review for this example yet. Run a live review once and it will be saved.")
-
+ 
 # ---------- 02 / Evidence ----------
 st.header("02 / Evidence")
 result = st.session_state.get("result")
 if result:
     label = "Live review" if result["source"] == "live" else f"Saved review from {result['time']}"
-
+ 
     # Stale-result check: was this review made for the example and inputs shown above?
     outdated = result.get("sample") != sample or result.get("prompt") != current_prompt
     if outdated:
@@ -156,7 +137,7 @@ if result:
             "Click 'Review with Gemini' to review what is on screen now."
         )
         label += ", OUTDATED"
-
+ 
     st.subheader(f"The model's review ({label})")
     st.caption(f"Model: {result['model']}  |  Question: {result['question']}")
     if result.get("context"):
