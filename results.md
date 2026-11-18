@@ -228,3 +228,33 @@ Apache released multiple patches to fix the issue and subsequent bypasses discov
   - "Downloads malicious Java code and executes it": newer Java versions block loading remote classes over JNDI by default (`trustURLCodebase=false`). Attackers worked around that with other techniques, and could still leak secrets with lookups like `${env:...}`, but the simple "download and run" path isn't the default anymore. Gemini doesn't mention this.
 - **Claimed without evidence:** "First observed in Minecraft." The bug was reported to Apache by Alibaba Cloud's security team. Minecraft was where public exploitation became widely known. The list of affected cloud providers and "Java runs on billions of devices" come with no sources.
 - **How I checked:** NVD entry for CVE-2021-44228, the Apache Log4j security page, and CISA's Log4j guidance.
+
+## Experiment 4: Agent with tools (week 5)
+
+**Model:** gemini-3.5-flash-lite, run with Google ADK (`agent.py`)
+
+**Task:** "Review sample_app for security problems. Start with app.py."
+
+**Tools:** `list_files` and `read_file` (only files inside `sample_app/`, at most 80 lines and 6000 characters per call)
+
+**My expectation (before running):** The bug is in `network.py`, but the user input starts in `app.py` and passes through `checks.py`. I expected the agent to read all three files to find it.
+
+**What the agent did:**
+
+1. `list_files()` → app.py, checks.py, network.py
+2. `read_file("app.py")` → saw the calls to `clean_host` and `ping_host`
+3. `read_file("checks.py")` → `clean_host` only strips spaces and checks the length
+4. `read_file("network.py")` → `"ping -c 1 " + host` run with `shell=True`
+5. Final report (5 model calls, limit was 8)
+
+**Agent's finding:** Command injection in `network.py`. Fix: pass a list to `subprocess.run` and remove `shell=True`, and validate the host name.
+
+**My assessment:**
+
+- **Right:** Found the command injection. An input like `8.8.8.8; cat /etc/passwd` would run a second command.
+- **Right:** It read `checks.py` before deciding, and correctly said `clean_host` does not block characters like `;`.
+- **Right:** The fix is correct.
+- **Small mistake:** It said line 6, but the command string is built on line 5. Both lines are part of the bug.
+- **Good:** It listed the files it checked and gave honest limitations.
+
+**What I learned:** With tools, the agent could follow the user input across files by itself, instead of only seeing the code I pasted.

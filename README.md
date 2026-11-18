@@ -1,6 +1,6 @@
 # gemini-security
 
-First Gemini API experiment: testing how well an LLM reviews cybersecurity examples, such as insecure code, Windows security events and known vulnerabilities. For each experiment I wrote down what I expected, ran the prompt, and then checked what Gemini got right, what it missed, and what it claimed without evidence.
+Testing how well an LLM reviews cybersecurity examples, such as insecure code, Windows security events and known vulnerabilities. For each experiment I wrote down what I expected, ran the prompt, and then checked what Gemini got right, what it missed, and what it claimed without evidence.
 
 ## Model
 
@@ -71,6 +71,38 @@ streamlit run app.py
 
 The app opens at http://localhost:8501. Stop it with `Ctrl+C`.
 
+## Agent with tools (week 5)
+
+`agent.py` is a security review agent built with [Google ADK](https://github.com/google/adk-python). Instead of one Gemini call, Gemini can ask for files with two tools from `tools.py`, and ADK repeats the loop (model → tool → model) until Gemini gives a final report or reaches the limit.
+
+| Tool | Input | Returns |
+|---|---|---|
+| `list_files()` | nothing | the files in `sample_app/` |
+| `read_file(path, start_line, end_line)` | a file name and line range | the code with line numbers, `total_lines` and `truncated` |
+
+**Limits and safety:**
+
+- The tools can only read files inside `sample_app/`. A request like `../.env` is refused, so the API key stays private.
+- `read_file` returns at most 80 lines and 6000 characters per call.
+- The agent makes at most 8 Gemini calls (`MAX_LLM_CALLS`).
+- The files in `sample_app/` are only read as text. They are never run.
+
+**Sample app:** `sample_app/` is a small "ping a host" feature. User input goes from `app.py` through `checks.py` to `network.py`, where it is run in a shell. To find the bug, the agent has to follow the input across all three files.
+
+**Run it** (needs the `.env` file with your key):
+
+```
+python agent.py
+```
+
+It prints each tool call and result, then a report with Findings, Files checked and Limitations. The run and my assessment are in [results.md](results.md) (Experiment 4).
+
+**Try the tools directly** (no API key needed):
+
+```
+python -c "from tools import list_files, read_file; print(list_files()); print(read_file('app.py'))"
+```
+
 ## Experiments
 
 | # | Prompt file | Topic |
@@ -78,6 +110,7 @@ The app opens at http://localhost:8501. Stop it with `Ctrl+C`.
 | 1 | `prompt1.txt` | Code review of a Python function with SQL injection |
 | 2 | `prompt2.txt` | Windows Event ID 4625 (failed logon) |
 | 3 | `prompt3.txt` | CVE-2021-44228 (Log4Shell) |
+| 4 | `agent.py` | Agent with tools reviewing `sample_app/` (command injection) |
 
 Full prompts, responses, expectations and assessments are in [results.md](results.md).
 
@@ -86,6 +119,7 @@ Full prompts, responses, expectations and assessments are in [results.md](result
 - **Experiment 1 (claim I checked):** Gemini correctly found the SQL injection and suggested parameterized queries. But it claimed that `with sqlite3.connect(...)` closes the connection. The Python sqlite3 documentation shows the context manager only commits or rolls back the transaction. So Gemini's "fixed" code still leaks the connection it warned about. The correct fix is `contextlib.closing()` or `conn.close()`.
 - **Experiment 2:** The overall SOC guidance was good, but it said external RDP attacks appear as Logon Type 10. With Network Level Authentication, failed RDP logons usually appear as Type 3, so a rule based on this answer would miss attacks. It also left out related events such as 4740, 4771 and 4776.
 - **Experiment 3:** The main facts (RCE, JNDI lookups, CVSS 10.0) were correct, but the patch history was simplified, and some claims (like "first observed in Minecraft") had no sources.
+- **Experiment 4 (agent):** The agent read all three files in `sample_app/` and correctly found the command injection in `network.py`, including that `checks.py` does not block `;`. It cited line 6, but the command string is built on line 5.
 
 ## Reflection
 
